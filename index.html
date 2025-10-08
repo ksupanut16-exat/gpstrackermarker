@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GPS Tracker + Google Sheets Integration</title>
+  <title>GPS Tracker + Google Sheets Status Colors</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
@@ -45,9 +45,7 @@
     #importBtn { background: #ffc107; color: black; }
     #importBtn:hover { background: #e0a800; }
 
-    .leaflet-control-zoom {
-      margin-top: 2cm !important;
-    }
+    .leaflet-control-zoom { margin-top: 2cm !important; }
 
     .status-bar {
       position: absolute;
@@ -86,8 +84,6 @@
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
-
-      setTimeout(() => map.invalidateSize(), 500);
 
       let marker, circle, polyline;
       let path = [];
@@ -194,24 +190,6 @@
         a.click();
       });
 
-      // 📂 นำเข้า JSON
-      const fileInput = document.getElementById('fileInput');
-      document.getElementById('importBtn').addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', e => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = ev => {
-          const data = JSON.parse(ev.target.result);
-          path = data.path || [];
-          totalDistance = data.totalDistance || 0;
-          if (polyline) map.removeLayer(polyline);
-          polyline = L.polyline(path, { color: "green", weight: 4 }).addTo(map);
-          map.fitBounds(polyline.getBounds());
-          statusEl.innerHTML = "📂 โหลดเส้นทางสำเร็จ";
-        };
-        reader.readAsText(file);
-      });
-
       // 🧹 ล้างข้อมูล
       document.getElementById('clearBtn').addEventListener('click', () => {
         path = [];
@@ -221,7 +199,7 @@
         statusEl.innerHTML = "🧹 ล้างข้อมูลแล้ว";
       });
 
-      // 🗺️ โหลด Marker จาก Google Sheets
+      // 🗺️ โหลด Marker จาก Google Sheets (พร้อมสีตามสถานะ)
       const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
       const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
 
@@ -242,6 +220,16 @@
             const status = r.c[8]?.v;
 
             if (lat && lng) {
+              let color = "blue";
+              if (/เสร็จ/i.test(status)) color = "green";
+              else if (/กำลัง/i.test(status)) color = "orange";
+              else if (/ยังไม่/i.test(status)) color = "red";
+
+              const icon = L.divIcon({
+                html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
+                className: ""
+              });
+
               const popup = `
                 <b>${name}</b><br>
                 📅 ${lastRepair || "-"}<br>
@@ -251,7 +239,7 @@
                 📄 <a href="${report}" target="_blank">ใบแจ้งงาน</a><br>
                 🔰 สถานะ: <b>${status || "-"}</b>
               `;
-              L.marker([lat, lng]).addTo(map).bindPopup(popup);
+              L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
             }
           });
         });
