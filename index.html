@@ -2,51 +2,95 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GPS Tracker + Google Sheets Route</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GPS Tracker + Google Sheets Route (Responsive)</title>
 
   <!-- ✅ Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
-    html, body { height: 100%; margin: 0; padding: 0; }
-    #map { height: 100vh; width: 100%; }
-
-    .status-bar {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background: rgba(255,255,255,0.9);
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      z-index: 1000;
-      line-height: 1.4;
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: #f5f6fa;
     }
 
-    /* 🧩 Legend สี */
+    #map {
+      height: 100vh;
+      width: 100%;
+      z-index: 1;
+    }
+
+    /* ✅ แถบสถานะ */
+    .status-bar {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      z-index: 1000;
+      line-height: 1.4;
+      max-width: 90%;
+    }
+
+    /* ✅ Legend สี */
     .legend {
-      position: absolute;
+      position: fixed;
       bottom: 20px;
       right: 20px;
       background: rgba(255,255,255,0.95);
       padding: 10px 12px;
       border-radius: 8px;
       font-size: 13px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
       line-height: 1.6;
       z-index: 9999;
+      transition: all 0.3s ease;
     }
+
     .legend div {
       display: flex;
       align-items: center;
       gap: 6px;
     }
+
     .legend-color {
       width: 14px;
       height: 14px;
       border-radius: 50%;
       border: 1px solid #666;
+      flex-shrink: 0;
+    }
+
+    /* ✅ Responsive: จอเล็ก (มือถือ) */
+    @media (max-width: 600px) {
+      .status-bar {
+        font-size: 12px;
+        bottom: 8px;
+        left: 8px;
+        padding: 8px 10px;
+      }
+
+      .legend {
+        font-size: 12px;
+        bottom: 70px;
+        right: 8px;
+        padding: 8px 10px;
+      }
+
+      .legend-color {
+        width: 12px;
+        height: 12px;
+      }
+
+      .leaflet-popup-content {
+        font-size: 13px;
+      }
     }
   </style>
 </head>
@@ -72,14 +116,20 @@
     window.onload = () => {
       console.log("🚀 เริ่มต้นโหลดแผนที่...");
 
-      // ✅ ตรวจว่า Leaflet โหลดสำเร็จไหม
       if (typeof L === "undefined") {
         console.error("❌ Leaflet ยังไม่ถูกโหลด กรุณาตรวจสอบลิงก์ JS/CSS");
         return;
       }
 
       // ✅ สร้างแผนที่
-      const map = L.map('map').setView([13.736717, 100.523186], 13);
+      const map = L.map('map', {
+        zoomControl: true,
+        attributionControl: true,
+        tap: true,             // รองรับการแตะหน้าจอ
+        inertia: true,         // เคลื่อนไหวตามนิ้วลาก
+        maxZoom: 19
+      }).setView([13.736717, 100.523186], 13);
+
       console.log("🗺️ แผนที่ถูกสร้างแล้ว");
 
       // ✅ โหลดแผนที่จาก OpenStreetMap
@@ -89,8 +139,6 @@
       }).addTo(map);
 
       const statusEl = document.getElementById("status");
-
-      // ✅ Google Sheet ข้อมูล
       const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
       const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
 
@@ -105,7 +153,6 @@
         fetch(sheetURL)
           .then(res => res.text())
           .then(text => {
-            // ลบ marker และเส้นทางเก่า
             sheetMarkers.forEach(m => map.removeLayer(m));
             sheetMarkers = [];
             if (routeLine) map.removeLayer(routeLine);
@@ -120,7 +167,7 @@
             const rows = json.table.rows;
             console.log(`📊 พบข้อมูลทั้งหมด ${rows.length} แถว`);
 
-            const routePoints = []; // 🔹 เก็บจุดพิกัดทั้งหมด
+            const routePoints = [];
 
             rows.forEach(r => {
               const name = r.c[0]?.v;
@@ -158,27 +205,22 @@
 
                 const marker = L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
                 sheetMarkers.push(marker);
-
-                // 🔹 เก็บพิกัดเพื่อสร้างเส้นเชื่อม
                 routePoints.push([lat, lng]);
               }
             });
 
-            // 🔷 สร้างเส้นทางเชื่อมทุกจุด (Polyline)
+            // 🔷 วาดเส้นทางเชื่อมทุกจุด
             if (routePoints.length > 1) {
               routeLine = L.polyline(routePoints, {
-                color: "blue",
+                color: "#007bff",
                 weight: 3,
-                opacity: 0.7
+                opacity: 0.8
               }).addTo(map);
-
-              // ปรับแผนที่ให้พอดีกับเส้นทางทั้งหมด
               map.fitBounds(routeLine.getBounds());
               console.log(`🛣️ วาดเส้นเชื่อม ${routePoints.length} จุดสำเร็จ`);
             }
 
-            statusEl.innerHTML = "✅ ข้อมูลอัปเดตล่าสุดเมื่อ " + new Date().toLocaleTimeString();
-            console.log("✅ โหลดข้อมูล Google Sheets เสร็จสิ้น");
+            statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
           })
           .catch(err => {
             console.error("❌ โหลดข้อมูลจาก Google Sheets ล้มเหลว:", err);
@@ -189,7 +231,7 @@
       // 🔁 โหลดข้อมูลครั้งแรก
       loadSheetData();
 
-      // ⏱️ ตั้งเวลาอัปเดตอัตโนมัติทุก 5 นาที (300000 มิลลิวินาที)
+      // ⏱️ ตั้งเวลาอัปเดตอัตโนมัติทุก 5 นาที (300000 ms)
       setInterval(loadSheetData, 300000);
     };
   </script>
