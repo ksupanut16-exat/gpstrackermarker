@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPS Tracker + Google Sheets Integration</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; }
+    #map { height: 100vh; width: 100%; }
+
+    .control-panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
+    button:hover { background: #0056b3; }
+
+    #saveBtn { background: #28a745; }
+    #saveBtn:hover { background: #1e7e34; }
+
+    #gpxBtn { background: #17a2b8; }
+    #gpxBtn:hover { background: #117a8b; }
+
+    #clearBtn { background: #dc3545; }
+    #clearBtn:hover { background: #a71d2a; }
+
+    #importBtn { background: #ffc107; color: black; }
+    #importBtn:hover { background: #e0a800; }
+
+    .leaflet-control-zoom {
+      margin-top: 2cm !important;
+    }
+
+    .status-bar {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 1000;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="control-panel">
+    <button id="startBtn">▶️ เริ่มติดตาม</button>
+    <button id="stopBtn" disabled>⏸️ หยุดติดตาม</button>
+    <button id="saveBtn">💾 บันทึก JSON</button>
+    <button id="gpxBtn">⬇️ บันทึก GPX</button>
+    <button id="importBtn">📂 นำเข้า</button>
+    <button id="clearBtn">🧹 ล้างข้อมูล</button>
+    <input type="file" id="fileInput" accept=".json" style="display:none;">
+  </div>
+
+  <div id="map"></div>
+  <div id="status" class="status-bar">🕓 รอเริ่มติดตาม...</div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <script>
+    window.onload = () => {
+      const map = L.map('map').setView([13.736717, 100.523186], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      setTimeout(() => map.invalidateSize(), 500);
+
+      let marker, circle, polyline;
+      let path = [];
+      let totalDistance = 0;
+      let startTime = null;
+      let watchInterval = null;
+      const statusEl = document.getElementById("status");
+
+      // 📏 คำนวณระยะทาง
+      function calcDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 +
+                  Math.cos(lat1 * Math.PI/180) *
+                  Math.cos(lat2 * Math.PI/180) *
+                  Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      }
+
+      // 📍 อัปเดตตำแหน่งผู้ใช้
+      function updateLocation() {
+        if (!navigator.geolocation) {
+          alert("เบราว์เซอร์ไม่รองรับ geolocation");
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(pos => {
+          const { latitude, longitude, accuracy } = pos.coords;
+
+          if (marker) {
+            map.removeLayer(marker);
+            map.removeLayer(circle);
+          }
+
+          marker = L.marker([latitude, longitude]).addTo(map);
+          circle = L.circle([latitude, longitude], { radius: accuracy }).addTo(map);
+
+          if (path.length > 0) {
+            const [prevLat, prevLng] = path[path.length - 1];
+            totalDistance += calcDistance(prevLat, prevLng, latitude, longitude);
+          }
+
+          path.push([latitude, longitude]);
+
+          if (polyline) map.removeLayer(polyline);
+          polyline = L.polyline(path, { color: "blue", weight: 4 }).addTo(map);
+          map.setView([latitude, longitude], 16);
+
+          const elapsed = startTime
+            ? ((Date.now() - startTime) / 1000 / 60).toFixed(1)
+            : 0;
+
+          statusEl.innerHTML =
+            `📍 พิกัดล่าสุด: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}<br>` +
+            `📏 ระยะทางรวม: ${totalDistance.toFixed(2)} กม.<br>` +
+            `⏱️ เวลา: ${elapsed} นาที`;
+        });
+      }
+
+      // ▶️ เริ่มติดตาม
+      document.getElementById('startBtn').addEventListener('click', () => {
+        path = [];
+        totalDistance = 0;
+        startTime = Date.now();
+        updateLocation();
+        watchInterval = setInterval(updateLocation, 10000);
+        statusEl.innerHTML = "🚀 เริ่มติดตามแล้ว...";
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+      });
+
+      // ⏸️ หยุดติดตาม
+      document.getElementById('stopBtn').addEventListener('click', () => {
+        clearInterval(watchInterval);
+        statusEl.innerHTML += "<br>⏸️ หยุดติดตามแล้ว";
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').disabled = true;
+      });
+
+      // 💾 บันทึก JSON
+      document.getElementById('saveBtn').addEventListener('click', () => {
+        const data = { path, totalDistance, startTime };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `route_${new Date().toISOString().split("T")[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      // ⬇️ บันทึก GPX
+      document.getElementById('gpxBtn').addEventListener('click', () => {
+        if (!path.length) return alert("ยังไม่มีเส้นทาง");
+        let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="GPS Tracker" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><name>Route</name><trkseg>\n`;
+        path.forEach(([lat, lon]) => gpx += `<trkpt lat="${lat}" lon="${lon}"></trkpt>\n`);
+        gpx += `</trkseg></trk>\n</gpx>`;
+        const blob = new Blob([gpx], { type: "application/gpx+xml" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `route_${new Date().toISOString().split("T")[0]}.gpx`;
+        a.click();
+      });
+
+      // 📂 นำเข้า JSON
+      const fileInput = document.getElementById('fileInput');
+      document.getElementById('importBtn').addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const data = JSON.parse(ev.target.result);
+          path = data.path || [];
+          totalDistance = data.totalDistance || 0;
+          if (polyline) map.removeLayer(polyline);
+          polyline = L.polyline(path, { color: "green", weight: 4 }).addTo(map);
+          map.fitBounds(polyline.getBounds());
+          statusEl.innerHTML = "📂 โหลดเส้นทางสำเร็จ";
+        };
+        reader.readAsText(file);
+      });
+
+      // 🧹 ล้างข้อมูล
+      document.getElementById('clearBtn').addEventListener('click', () => {
+        path = [];
+        totalDistance = 0;
+        startTime = null;
+        if (polyline) map.removeLayer(polyline);
+        statusEl.innerHTML = "🧹 ล้างข้อมูลแล้ว";
+      });
+
+      // 🗺️ โหลด Marker จาก Google Sheets
+      const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
+      const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
+
+      fetch(sheetURL)
+        .then(res => res.text())
+        .then(text => {
+          const json = JSON.parse(text.substring(47).slice(0, -2));
+          const rows = json.table.rows;
+          rows.forEach(r => {
+            const name = r.c[0]?.v;
+            const lat = r.c[1]?.v;
+            const lng = r.c[2]?.v;
+            const lastRepair = r.c[3]?.v;
+            const job = r.c[4]?.v;
+            const tech = r.c[5]?.v;
+            const photo = r.c[6]?.v;
+            const report = r.c[7]?.v;
+            const status = r.c[8]?.v;
+
+            if (lat && lng) {
+              const popup = `
+                <b>${name}</b><br>
+                📅 ${lastRepair || "-"}<br>
+                🛠️ ${job || "-"}<br>
+                👷 ${tech || "-"}<br>
+                📸 <a href="${photo}" target="_blank">รูปถ่าย</a><br>
+                📄 <a href="${report}" target="_blank">ใบแจ้งงาน</a><br>
+                🔰 สถานะ: <b>${status || "-"}</b>
+              `;
+              L.marker([lat, lng]).addTo(map).bindPopup(popup);
+            }
+          });
+        });
+    };
+  </script>
+</body>
+</html>
