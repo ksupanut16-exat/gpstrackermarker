@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GPS Tracker + Google Sheets Route (Responsive)</title>
+  <title>GPS Tracker + Google Sheets (Responsive)</title>
 
   <!-- ✅ Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -124,116 +124,4 @@
       // ✅ สร้างแผนที่
       const map = L.map('map', {
         zoomControl: true,
-        attributionControl: true,
-        tap: true,             // รองรับการแตะหน้าจอ
-        inertia: true,         // เคลื่อนไหวตามนิ้วลาก
-        maxZoom: 19
-      }).setView([13.736717, 100.523186], 13);
-
-      console.log("🗺️ แผนที่ถูกสร้างแล้ว");
-
-      // ✅ โหลดแผนที่จาก OpenStreetMap
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
-
-      const statusEl = document.getElementById("status");
-      const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
-      const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
-
-      let sheetMarkers = [];
-      let routeLine = null;
-
-      // 📦 โหลดข้อมูลจาก Google Sheets + แสดงเส้นทางเชื่อม marker
-      function loadSheetData() {
-        console.log("📡 กำลังโหลดข้อมูลจาก Google Sheets...");
-        statusEl.innerHTML = "📡 กำลังโหลดข้อมูลล่าสุดจาก Google Sheets...";
-
-        fetch(sheetURL)
-          .then(res => res.text())
-          .then(text => {
-            sheetMarkers.forEach(m => map.removeLayer(m));
-            sheetMarkers = [];
-            if (routeLine) map.removeLayer(routeLine);
-
-            if (!text.startsWith("/*O_o*/")) {
-              console.error("❌ ข้อมูลไม่ถูกต้องจาก Google Sheets");
-              statusEl.innerHTML = "❌ โหลดข้อมูลล้มเหลว (รูปแบบไม่ถูกต้อง)";
-              return;
-            }
-
-            const json = JSON.parse(text.substring(47).slice(0, -2));
-            const rows = json.table.rows;
-            console.log(`📊 พบข้อมูลทั้งหมด ${rows.length} แถว`);
-
-            const routePoints = [];
-
-            rows.forEach(r => {
-              const name = r.c[0]?.v;
-              const lat = r.c[1]?.v;
-              const lng = r.c[2]?.v;
-              const lastRepair = r.c[3]?.v;
-              const job = r.c[4]?.v;
-              const tech = r.c[5]?.v;
-              const photo = r.c[6]?.v;
-              const report = r.c[7]?.v;
-              const status = r.c[8]?.v || "";
-
-              if (lat && lng) {
-                let color = "blue";
-                if (/^SP\d+/i.test(status)) color = "yellow";
-                else if (/^HM\d+/i.test(status)) color = "pink";
-                else if (/เสร็จ/i.test(status)) color = "green";
-                else if (/กำลัง/i.test(status)) color = "orange";
-                else if (/ยังไม่/i.test(status)) color = "red";
-
-                const icon = L.divIcon({
-                  html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
-                  className: ""
-                });
-
-                const popup = `
-                  <b>${name}</b><br>
-                  📅 ${lastRepair || "-"}<br>
-                  🛠️ ${job || "-"}<br>
-                  👷 ${tech || "-"}<br>
-                  📸 <a href="${photo}" target="_blank">รูปถ่าย</a><br>
-                  📄 <a href="${report}" target="_blank">ใบแจ้งงาน</a><br>
-                  🔰 สถานะ: <b>${status || "-"}</b>
-                `;
-
-                const marker = L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
-                sheetMarkers.push(marker);
-                routePoints.push([lat, lng]);
-              }
-            });
-
-            // 🔷 วาดเส้นทางเชื่อมทุกจุด
-            if (routePoints.length > 1) {
-              routeLine = L.polyline(routePoints, {
-                color: "#007bff",
-                weight: 3,
-                opacity: 0.8
-              }).addTo(map);
-              map.fitBounds(routeLine.getBounds());
-              console.log(`🛣️ วาดเส้นเชื่อม ${routePoints.length} จุดสำเร็จ`);
-            }
-
-            statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
-          })
-          .catch(err => {
-            console.error("❌ โหลดข้อมูลจาก Google Sheets ล้มเหลว:", err);
-            statusEl.innerHTML = "❌ โหลดข้อมูลจาก Google Sheets ไม่สำเร็จ";
-          });
-      }
-
-      // 🔁 โหลดข้อมูลครั้งแรก
-      loadSheetData();
-
-      // ⏱️ ตั้งเวลาอัปเดตอัตโนมัติทุก 5 นาที (300000 ms)
-      setInterval(loadSheetData, 300000);
-    };
-  </script>
-</body>
-</html>
+        attributionCont
