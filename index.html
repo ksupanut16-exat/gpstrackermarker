@@ -198,61 +198,52 @@
         if (polyline) map.removeLayer(polyline);
         statusEl.innerHTML = "🧹 ล้างข้อมูลแล้ว";
       });
-
       // 🗺️ โหลด Marker จาก Google Sheets (พร้อมสีตามสถานะและรหัส)
-const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
-const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
+      const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
+      const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
 
-fetch(sheetURL)
-  .then(res => res.text())
-  .then(text => {
-    const json = JSON.parse(text.substring(47).slice(0, -2));
-    const rows = json.table.rows;
+      fetch(sheetURL)
+        .then(res => res.text())
+        .then(text => {
+          const json = JSON.parse(text.substring(47).slice(0, -2));
+          const rows = json.table.rows;
 
-    rows.forEach(r => {
-      const name = r.c[0]?.v;
-      const lat = r.c[1]?.v;
-      const lng = r.c[2]?.v;
-      const lastRepair = r.c[3]?.v;
-      const job = r.c[4]?.v;
-      const tech = r.c[5]?.v;
-      const photo = r.c[6]?.v;
-      const report = r.c[7]?.v;
-      const status = r.c[8]?.v || "";
+          rows.forEach(r => {
+            const name = r.c[0]?.v;
+            const lat = r.c[1]?.v;
+            const lng = r.c[2]?.v;
+            const lastRepair = r.c[3]?.v;
+            const job = r.c[4]?.v;
+            const tech = r.c[5]?.v;
+            const photo = r.c[6]?.v;
+            const report = r.c[7]?.v;
+            const status = r.c[8]?.v || "";
 
-      if (lat && lng) {
-        let color = "blue"; // ค่าเริ่มต้น
+            if (lat && lng) {
+              let color = "blue"; // ค่าเริ่มต้น
 
-        // 🔶 ตรวจจับ SP + ตัวเลข เช่น SP01, SP12
-        if (/^SP\d+/i.test(status)) color = "yellow";
+              if (/^SP\d+/i.test(status)) color = "yellow";
+              else if (/^HM\d+/i.test(status)) color = "pink";
+              else if (/เสร็จ/i.test(status)) color = "green";
+              else if (/กำลัง/i.test(status)) color = "orange";
+              else if (/ยังไม่/i.test(status)) color = "red";
 
-        // 💗 ตรวจจับ HM + ตัวเลข เช่น HM1, HM23
-        else if (/^HM\d+/i.test(status)) color = "pink";
+              const icon = L.divIcon({
+                html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
+                className: ""
+              });
 
-        // 🟢 สีตามสถานะข้อความ
-        else if (/เสร็จ/i.test(status)) color = "green";
-        else if (/กำลัง/i.test(status)) color = "orange";
-        else if (/ยังไม่/i.test(status)) color = "red";
-
-        const icon = L.divIcon({
-          html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
-          className: ""
-        });
-
-        const popup = `
-          <b>${name}</b><br>
-          📅 ${lastRepair || "-"}<br>
-          🛠️ ${job || "-"}<br>
-          👷 ${tech || "-"}<br>
-          📸 <a href="${photo}" target="_blank">รูปถ่าย</a><br>
-          📄 <a href="${report}" target="_blank">ใบแจ้งงาน</a><br>
-          🔰 สถานะ: <b>${status || "-"}</b>
-        `;
-        L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
-      }
-    });
-  });
-
-  </script>
-</body>
-</html>
+              const popup = `
+                <b>${name}</b><br>
+                📅 ${lastRepair || "-"}<br>
+                🛠️ ${job || "-"}<br>
+                👷 ${tech || "-"}<br>
+                📸 <a href="${photo}" target="_blank">รูปถ่าย</a><br>
+                📄 <a href="${report}" target="_blank">ใบแจ้งงาน</a><br>
+                🔰 สถานะ: <b>${status || "-"}</b>
+              `;
+              L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
+            }
+          });
+        })
+        .catch(err => console.error("โหลดข้อมูลจาก Google Sheets ล้มเหลว:", err));
