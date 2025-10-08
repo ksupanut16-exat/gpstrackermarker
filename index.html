@@ -3,49 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GPS Tracker + Google Sheets Status Colors</title>
+  <title>GPS Tracker + Google Sheets Debug</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <!-- ✅ Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+4b8Kz0D0WfTgkUJbJQ7FQ0vFv7pnhM7Nf1pA+Z1w="
+    crossorigin=""
+  />
+
   <style>
     html, body { height: 100%; margin: 0; padding: 0; }
     #map { height: 100vh; width: 100%; }
-
-    .control-panel {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    button {
-      background: #007bff;
-      color: white;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 14px;
-      cursor: pointer;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    }
-
-    button:hover { background: #0056b3; }
-
-    #saveBtn { background: #28a745; }
-    #saveBtn:hover { background: #1e7e34; }
-
-    #gpxBtn { background: #17a2b8; }
-    #gpxBtn:hover { background: #117a8b; }
-
-    #clearBtn { background: #dc3545; }
-    #clearBtn:hover { background: #a71d2a; }
-
-    #importBtn { background: #ffc107; color: black; }
-    #importBtn:hover { background: #e0a800; }
-
-    .leaflet-control-zoom { margin-top: 2cm !important; }
 
     .status-bar {
       position: absolute;
@@ -62,151 +32,63 @@
 </head>
 
 <body>
-  <div class="control-panel">
-    <button id="startBtn">▶️ เริ่มติดตาม</button>
-    <button id="stopBtn" disabled>⏸️ หยุดติดตาม</button>
-    <button id="saveBtn">💾 บันทึก JSON</button>
-    <button id="gpxBtn">⬇️ บันทึก GPX</button>
-    <button id="importBtn">📂 นำเข้า</button>
-    <button id="clearBtn">🧹 ล้างข้อมูล</button>
-    <input type="file" id="fileInput" accept=".json" style="display:none;">
-  </div>
-
   <div id="map"></div>
   <div id="status" class="status-bar">🕓 รอเริ่มติดตาม...</div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- ✅ Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1j7kGStG2zYw2x+hG3WZBeb5lL1zGPEz3T2oCjHc="
+    crossorigin=""
+  ></script>
 
   <script>
     window.onload = () => {
+      console.log("🚀 เริ่มต้นโหลดแผนที่...");
+
+      // ✅ ตรวจว่า Leaflet โหลดสำเร็จไหม
+      if (typeof L === "undefined") {
+        console.error("❌ Leaflet ยังไม่ถูกโหลด กรุณาตรวจสอบลิงก์ JS/CSS");
+        return;
+      }
+
+      // ✅ สร้างแผนที่
       const map = L.map('map').setView([13.736717, 100.523186], 13);
+      console.log("🗺️ แผนที่ถูกสร้างแล้ว");
+
+      // ✅ โหลดแผนที่จาก OpenStreetMap
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
-      let marker, circle, polyline;
-      let path = [];
-      let totalDistance = 0;
-      let startTime = null;
-      let watchInterval = null;
+      // ✅ แสดงข้อความสถานะ
       const statusEl = document.getElementById("status");
+      statusEl.innerHTML = "🗺️ แผนที่พร้อมแล้ว กำลังโหลดข้อมูลจาก Google Sheets...";
 
-      // 📏 คำนวณระยะทาง
-      function calcDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2)**2 +
-                  Math.cos(lat1 * Math.PI/180) *
-                  Math.cos(lat2 * Math.PI/180) *
-                  Math.sin(dLon/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      }
-
-      // 📍 อัปเดตตำแหน่งผู้ใช้
-      function updateLocation() {
-        if (!navigator.geolocation) {
-          alert("เบราว์เซอร์ไม่รองรับ geolocation");
-          return;
-        }
-
-        navigator.geolocation.getCurrentPosition(pos => {
-          const { latitude, longitude, accuracy } = pos.coords;
-
-          if (marker) {
-            map.removeLayer(marker);
-            map.removeLayer(circle);
-          }
-
-          marker = L.marker([latitude, longitude]).addTo(map);
-          circle = L.circle([latitude, longitude], { radius: accuracy }).addTo(map);
-
-          if (path.length > 0) {
-            const [prevLat, prevLng] = path[path.length - 1];
-            totalDistance += calcDistance(prevLat, prevLng, latitude, longitude);
-          }
-
-          path.push([latitude, longitude]);
-
-          if (polyline) map.removeLayer(polyline);
-          polyline = L.polyline(path, { color: "blue", weight: 4 }).addTo(map);
-          map.setView([latitude, longitude], 16);
-
-          const elapsed = startTime
-            ? ((Date.now() - startTime) / 1000 / 60).toFixed(1)
-            : 0;
-
-          statusEl.innerHTML =
-            `📍 พิกัดล่าสุด: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}<br>` +
-            `📏 ระยะทางรวม: ${totalDistance.toFixed(2)} กม.<br>` +
-            `⏱️ เวลา: ${elapsed} นาที`;
-        });
-      }
-
-      // ▶️ เริ่มติดตาม
-      document.getElementById('startBtn').addEventListener('click', () => {
-        path = [];
-        totalDistance = 0;
-        startTime = Date.now();
-        updateLocation();
-        watchInterval = setInterval(updateLocation, 10000);
-        statusEl.innerHTML = "🚀 เริ่มติดตามแล้ว...";
-        document.getElementById('startBtn').disabled = true;
-        document.getElementById('stopBtn').disabled = false;
-      });
-
-      // ⏸️ หยุดติดตาม
-      document.getElementById('stopBtn').addEventListener('click', () => {
-        clearInterval(watchInterval);
-        statusEl.innerHTML += "<br>⏸️ หยุดติดตามแล้ว";
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('stopBtn').disabled = true;
-      });
-
-      // 💾 บันทึก JSON
-      document.getElementById('saveBtn').addEventListener('click', () => {
-        const data = { path, totalDistance, startTime };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `route_${new Date().toISOString().split("T")[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-
-      // ⬇️ บันทึก GPX
-      document.getElementById('gpxBtn').addEventListener('click', () => {
-        if (!path.length) return alert("ยังไม่มีเส้นทาง");
-        let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="GPS Tracker" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><name>Route</name><trkseg>\n`;
-        path.forEach(([lat, lon]) => gpx += `<trkpt lat="${lat}" lon="${lon}"></trkpt>\n`);
-        gpx += `</trkseg></trk>\n</gpx>`;
-        const blob = new Blob([gpx], { type: "application/gpx+xml" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `route_${new Date().toISOString().split("T")[0]}.gpx`;
-        a.click();
-      });
-
-      // 🧹 ล้างข้อมูล
-      document.getElementById('clearBtn').addEventListener('click', () => {
-        path = [];
-        totalDistance = 0;
-        startTime = null;
-        if (polyline) map.removeLayer(polyline);
-        statusEl.innerHTML = "🧹 ล้างข้อมูลแล้ว";
-      });
-      // 🗺️ โหลด Marker จาก Google Sheets (พร้อมสีตามสถานะและรหัส)
+      // ✅ โหลดข้อมูลจาก Google Sheets
       const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
       const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
+
+      console.log("📡 กำลังโหลดข้อมูลจาก:", sheetURL);
 
       fetch(sheetURL)
         .then(res => res.text())
         .then(text => {
+          console.log("✅ โหลดข้อมูลจาก Google Sheets สำเร็จ");
+
+          // ตรวจว่าข้อมูล JSON ถูกต้องไหม
+          if (!text.startsWith("/*O_o*/")) {
+            console.error("❌ รูปแบบข้อมูลจาก Google Sheets ไม่ถูกต้อง");
+            console.log(text);
+            statusEl.innerHTML = "❌ โหลดข้อมูลไม่สำเร็จ — โปรดตรวจว่าได้ 'Publish to the web' แล้ว";
+            return;
+          }
+
+          // ตัด prefix/suffix ออกก่อน parse
           const json = JSON.parse(text.substring(47).slice(0, -2));
           const rows = json.table.rows;
+          console.log(`📊 พบข้อมูลทั้งหมด ${rows.length} แถว`);
 
           rows.forEach(r => {
             const name = r.c[0]?.v;
@@ -220,12 +102,17 @@
             const status = r.c[8]?.v || "";
 
             if (lat && lng) {
-              let color = "blue"; // ค่าเริ่มต้น
+              let color = "blue";
 
+              // 🔶 SPxx = เหลือง
               if (/^SP\d+/i.test(status)) color = "yellow";
+              // 💗 HMxx = ชมพู
               else if (/^HM\d+/i.test(status)) color = "pink";
+              // 🟢 เสร็จแล้ว
               else if (/เสร็จ/i.test(status)) color = "green";
+              // 🟠 กำลังทำ
               else if (/กำลัง/i.test(status)) color = "orange";
+              // 🔴 ยังไม่เริ่ม
               else if (/ยังไม่/i.test(status)) color = "red";
 
               const icon = L.divIcon({
@@ -242,8 +129,18 @@
                 📄 <a href="${report}" target="_blank">ใบแจ้งงาน</a><br>
                 🔰 สถานะ: <b>${status || "-"}</b>
               `;
+
               L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
             }
           });
+
+          statusEl.innerHTML = "✅ โหลดข้อมูลจาก Google Sheets สำเร็จ";
         })
-        .catch(err => console.error("โหลดข้อมูลจาก Google Sheets ล้มเหลว:", err));
+        .catch(err => {
+          console.error("❌ โหลดข้อมูลจาก Google Sheets ล้มเหลว:", err);
+          statusEl.innerHTML = "❌ โหลดข้อมูลจาก Google Sheets ไม่สำเร็จ — ดูใน Console";
+        });
+    };
+  </script>
+</body>
+</html>
