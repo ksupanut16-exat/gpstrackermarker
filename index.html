@@ -220,7 +220,7 @@
             const status = r.c[8]?.v;
 
             if (lat && lng) {
-              let color = "blue";
+              let color = "green";
               if (/เสร็จ/i.test(status)) color = "green";
               else if (/กำลัง/i.test(status)) color = "orange";
               else if (/ยังไม่/i.test(status)) color = "red";
