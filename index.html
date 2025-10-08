@@ -38,6 +38,25 @@
       max-width: 90%;
     }
 
+    /* ✅ ปุ่ม Refresh */
+    .refresh-btn {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      z-index: 2000;
+      transition: background 0.2s ease;
+    }
+    .refresh-btn:hover { background: #0056b3; }
+
     /* ✅ Legend สี */
     .legend {
       position: fixed;
@@ -52,13 +71,11 @@
       z-index: 9999;
       transition: all 0.3s ease;
     }
-
     .legend div {
       display: flex;
       align-items: center;
       gap: 6px;
     }
-
     .legend-color {
       width: 14px;
       height: 14px;
@@ -88,6 +105,13 @@
         height: 12px;
       }
 
+      .refresh-btn {
+        top: 10px;
+        right: 10px;
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+
       .leaflet-popup-content {
         font-size: 13px;
       }
@@ -96,6 +120,9 @@
 </head>
 
 <body>
+  <!-- ✅ ปุ่มอัปเดต -->
+  <button id="refreshBtn" class="refresh-btn">🔄 อัปเดตตอนนี้</button>
+
   <div id="map"></div>
   <div id="status" class="status-bar">🕓 กำลังโหลดแผนที่...</div>
 
@@ -124,4 +151,116 @@
       // ✅ สร้างแผนที่
       const map = L.map('map', {
         zoomControl: true,
-        attributionCont
+        attributionControl: true,
+        tap: true,
+        inertia: true,
+        maxZoom: 19
+      }).setView([13.736717, 100.523186], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      const statusEl = document.getElementById("status");
+      const refreshBtn = document.getElementById("refreshBtn");
+
+      const sheetID = "1KTFaGCzmtjJtezumsWDXFdsWlpZtSriq2mEHe-ujGNc";
+      const sheetURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json`;
+
+      let sheetMarkers = [];
+
+      // 📦 โหลดข้อมูลจาก Google Sheets
+      function loadSheetData() {
+        console.log("📡 กำลังโหลดข้อมูลจาก Google Sheets...");
+        statusEl.innerHTML = "📡 กำลังโหลดข้อมูลล่าสุดจาก Google Sheets...";
+
+        fetch(sheetURL)
+          .then(res => res.text())
+          .then(text => {
+            sheetMarkers.forEach(m => map.removeLayer(m));
+            sheetMarkers = [];
+
+            if (!text.startsWith("/*O_o*/")) {
+              console.error("❌ ข้อมูลไม่ถูกต้องจาก Google Sheets");
+              statusEl.innerHTML = "❌ โหลดข้อมูลล้มเหลว (รูปแบบไม่ถูกต้อง)";
+              return;
+            }
+
+            const json = JSON.parse(text.substring(47).slice(0, -2));
+            const rows = json.table.rows;
+            console.log(`📊 พบข้อมูลทั้งหมด ${rows.length} แถว`);
+
+            rows.forEach(r => {
+              const name = r.c[0]?.v;
+              const lat = r.c[1]?.v;
+              const lng = r.c[2]?.v;
+              const lastRepair = r.c[3]?.v;
+              const job = r.c[4]?.v;
+              const tech = r.c[5]?.v;
+              const photo = r.c[6]?.v;
+              const report = r.c[7]?.v;
+              const status = r.c[8]?.v || "";
+
+              if (lat && lng) {
+                let color = "blue";
+                if (/^SP\d+/i.test(status)) color = "yellow";
+                else if (/^HM\d+/i.test(status)) color = "pink";
+                else if (/เสร็จ/i.test(status)) color = "green";
+                else if (/กำลัง/i.test(status)) color = "orange";
+                else if (/ยังไม่/i.test(status)) color = "red";
+
+                const icon = L.divIcon({
+                  html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
+                  className: ""
+                });
+
+                const popup = `
+                  <b>${name}</b><br>
+                  📅 ${lastRepair || "-"}<br>
+                  🛠️ ${job || "-"}<br>
+                  👷 ${tech || "-"}<br>
+                  📸 <a href="${photo}" target="_blank">รูปถ่าย</a><br>
+                  📄 <a href="${report}" target="_blank">ใบแจ้งงาน</a><br>
+                  🔰 สถานะ: <b>${status || "-"}</b>
+                `;
+
+                const marker = L.marker([lat, lng], { icon }).addTo(map).bindPopup(popup);
+                sheetMarkers.push(marker);
+              }
+            });
+
+            // ✅ ปรับมุมมองให้เห็น marker ทั้งหมด
+            if (sheetMarkers.length > 0) {
+              const group = L.featureGroup(sheetMarkers);
+              map.fitBounds(group.getBounds());
+            }
+
+            statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
+          })
+          .catch(err => {
+            console.error("❌ โหลดข้อมูลจาก Google Sheets ล้มเหลว:", err);
+            statusEl.innerHTML = "❌ โหลดข้อมูลจาก Google Sheets ไม่สำเร็จ";
+          });
+      }
+
+      // 🔁 โหลดข้อมูลครั้งแรก
+      loadSheetData();
+
+      // ⏱️ ตั้งเวลาอัปเดตอัตโนมัติทุก 5 นาที (300000 ms)
+      setInterval(loadSheetData, 300000);
+
+      // 🖱️ ปุ่ม “อัปเดตตอนนี้”
+      refreshBtn.addEventListener("click", () => {
+        refreshBtn.disabled = true;
+        refreshBtn.innerText = "🔄 กำลังอัปเดต...";
+        loadSheetData();
+        setTimeout(() => {
+          refreshBtn.disabled = false;
+          refreshBtn.innerText = "🔄 อัปเดตตอนนี้";
+        }, 3000);
+      });
+    };
+  </script>
+</body>
+</html>
